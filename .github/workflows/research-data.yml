@@ -1,0 +1,46 @@
+name: research-data
+
+# Baixa o histórico de velas da Binance (data.binance.vision) e publica na branch
+# "research-data", para o laboratório de pesquisa (research/) usar sem acessar a corretora.
+# Dispara manualmente ou com um push na branch "research-data-request".
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research-data-request]
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install pandas pyarrow requests
+
+      - name: Baixar histórico
+        run: |
+          python tools/fetch_binance_vision.py research_data 1h,4h,1d \
+            BTCUSDT,ETHUSDT,BNBUSDT,XRPUSDT,SOLUSDT,ADAUSDT,DOGEUSDT,LTCUSDT,LINKUSDT,AVAXUSDT,TRXUSDT,DOTUSDT \
+            2019-01
+          ls -la research_data
+
+      - name: Publicar na branch research-data
+        run: |
+          cd research_data
+          git init -q -b research-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Histórico Binance spot gerado em $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" research-data
