@@ -29,21 +29,33 @@ COMMON=(
   --datadir "$DATA_DIR/data/binance"
 )
 
+run_backtest() {
+  echo "== Baixando histórico ($TIMEFRAME, $TIMERANGE) =="
+  freqtrade download-data "${COMMON[@]}" --timerange "$TIMERANGE" -t "$TIMEFRAME" || return 1
+
+  echo "== Rodando backtest da estratégia $STRATEGY =="
+  freqtrade backtesting "${COMMON[@]}" \
+    --strategy "$STRATEGY" \
+    --timerange "$TIMERANGE" \
+    --breakdown month \
+    --export none || return 1
+}
+
 case "$MODE" in
   backtest)
-    echo "== Baixando histórico ($TIMEFRAME, $TIMERANGE) =="
-    freqtrade download-data "${COMMON[@]}" --timerange "$TIMERANGE" -t "$TIMEFRAME"
+    if run_backtest; then
+      echo "== Backtest concluído. O resultado está acima neste log. =="
+      echo "== Para ligar o bot, mude BOT_MODE para trade. =="
+    else
+      echo "== O backtest falhou. Veja o erro acima. ==" >&2
+      echo "== O container fica parado para não repetir requisições à Binance. ==" >&2
+    fi
+    # Nunca sai: assim o Railway não reinicia o backtest em loop.
+    sleep infinity
+    ;;
 
-    echo "== Rodando backtest da estratégia $STRATEGY =="
-    freqtrade backtesting "${COMMON[@]}" \
-      --strategy "$STRATEGY" \
-      --timerange "$TIMERANGE" \
-      --breakdown month \
-      --export none
-
-    echo "== Backtest concluído. O resultado está acima neste log. =="
-    echo "== Para ligar o bot, mude BOT_MODE para trade. =="
-    # Mantém o container parado sem reiniciar o backtest em loop.
+  pause)
+    echo "== BOT_MODE=pause: nada é executado e nenhuma requisição é feita à Binance. =="
     sleep infinity
     ;;
 
@@ -54,7 +66,7 @@ case "$MODE" in
     ;;
 
   *)
-    echo "BOT_MODE inválido: '$MODE'. Use 'backtest' ou 'trade'." >&2
+    echo "BOT_MODE inválido: '$MODE'. Use 'backtest', 'trade' ou 'pause'." >&2
     exit 1
     ;;
 esac

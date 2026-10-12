@@ -49,7 +49,7 @@ O `Dockerfile` e o `start.sh` deste repositório são usados pelo Railway. O com
 
 | Variável | Valor | Para quê |
 |---|---|---|
-| `BOT_MODE` | `backtest` ou `trade` | `backtest` baixa o histórico e imprime o relatório no log; `trade` liga o bot |
+| `BOT_MODE` | `backtest`, `trade` ou `pause` | `backtest` baixa o histórico e imprime o relatório no log; `trade` liga o bot; `pause` deixa o serviço parado sem acessar a Binance |
 | `BACKTEST_TIMERANGE` | ex.: `20220101-` | período do backtest (opcional) |
 | `RAILWAY_RUN_UID` | `0` | necessário para o Freqtrade gravar no volume |
 | `FREQTRADE__TELEGRAM__ENABLED` | `true` | liga os avisos no Telegram |
