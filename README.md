@@ -8,6 +8,31 @@ Ele começa em **modo simulação** (dry-run): opera com uma carteira fictícia 
 
 ---
 
+## Pesquisa de estratégias
+
+Além da estratégia original, o repositório tem:
+
+- [`CandleProStrategy.py`](user_data/strategies/CandleProStrategy.py): a versão 2, que só compra padrões a favor da tendência do diário e num suporte, com stop abaixo do padrão e saídas medidas em R (múltiplos do risco). As subclasses ligam cada peça separadamente: confirmação, regime do BTC, trailing, sem breakeven e gráfico diário.
+- [`CandleFreqAIStrategy.py`](user_data/strategies/CandleFreqAIStrategy.py): as mesmas regras, com um modelo LightGBM do FreqAI como filtro. O modelo recebe a anatomia das velas e o contexto e estima a chance de o preço subir 2 ATR antes de cair 1 ATR. Ele é retreinado a cada 60 dias, de modo que cada período é previsto por um modelo que não viu aqueles dados.
+- [`research.sh`](research.sh) e [`Dockerfile.research`](Dockerfile.research): o serviço de pesquisa do Railway. Ele roda todas as variantes em ETH, BTC, BNB e XRP, com taxa de 0,1%, separando um período de desenvolvimento (mar/2021 a dez/2023) de um período de validação (jan/2024 a out/2026).
+
+Resultados de 12/10/2026 (lucro total, 1.000 USDT iniciais):
+
+| Variante | Desenvolvimento | Validação |
+|---|---|---|
+| v1 original | −37,4% | −37,4% |
+| v2 Contexto | −5,9% | −10,6% |
+| v2 Regime BTC | −6,4% | −8,4% |
+| v2 Trailing | −6,8% | −7,2% |
+| v2 sem breakeven | −4,6% | −10,6% |
+| v2 no diário | −14,7% | −16,4% |
+| v2 + FreqAI | +3,0% | −2,9% |
+| Comprar e segurar (média dos 4 pares) | +33% | +94% |
+
+Nenhuma variante mostrou vantagem consistente. A v2 corta a perda e o drawdown da v1 em cerca de 80%, e o filtro do FreqAI fica perto do zero a zero (41 operações, drawdown de 6,4%), mas nenhuma supera simplesmente comprar e segurar.
+
+---
+
 ## Como a estratégia funciona
 
 A estratégia fica em [`user_data/strategies/CandlePatternStrategy.py`](user_data/strategies/CandlePatternStrategy.py) e usa a TA-Lib para detectar os padrões. O Freqtrade só analisa **velas fechadas**, então nenhum sinal é gerado por uma vela ainda em formação.
