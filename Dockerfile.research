@@ -1,0 +1,10 @@
+# Imagem do serviço de pesquisa (backtests comparativos e FreqAI).
+# Usa a variante da imagem oficial que já inclui as bibliotecas de machine learning.
+FROM freqtradeorg/freqtrade:stable_freqai
+
+COPY --chown=ftuser:ftuser user_data/ /freqtrade/user_data/
+COPY --chown=ftuser:ftuser research.sh /freqtrade/research.sh
+
+ENV DATA_DIR=/tmp/research
+
+ENTRYPOINT ["/bin/bash", "/freqtrade/research.sh"]
