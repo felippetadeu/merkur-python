@@ -34,11 +34,34 @@ Todos esses números são pontos de partida. Ajuste-os depois de ver o resultado
 
 ---
 
-## Requisitos
+## Onde rodar
 
-- [Docker](https://docs.docker.com/get-docker/) com Docker Compose (no Windows e no Mac, o Docker Desktop já inclui os dois).
+Há duas formas, e nenhuma exige instalar Python ou TA-Lib (a imagem oficial do Freqtrade já traz tudo):
 
-Não é preciso instalar Python nem TA-Lib: a imagem oficial do Freqtrade já traz tudo.
+- **Railway (nuvem):** o bot fica ligado 24 horas sem depender do seu computador. Veja a seção [Rodar no Railway](#rodar-no-railway).
+- **No seu computador:** precisa do [Docker](https://docs.docker.com/get-docker/) com Docker Compose (no Windows e no Mac, o Docker Desktop já inclui os dois). Siga a partir de [Instalação](#instalação).
+
+---
+
+## Rodar no Railway
+
+O `Dockerfile` e o `start.sh` deste repositório são usados pelo Railway. O comportamento é controlado por variáveis do serviço:
+
+| Variável | Valor | Para quê |
+|---|---|---|
+| `BOT_MODE` | `backtest` ou `trade` | `backtest` baixa o histórico e imprime o relatório no log; `trade` liga o bot |
+| `BACKTEST_TIMERANGE` | ex.: `20220101-` | período do backtest (opcional) |
+| `RAILWAY_RUN_UID` | `0` | necessário para o Freqtrade gravar no volume |
+| `FREQTRADE__TELEGRAM__ENABLED` | `true` | liga os avisos no Telegram |
+| `FREQTRADE__TELEGRAM__TOKEN` | token do @BotFather | |
+| `FREQTRADE__TELEGRAM__CHAT_ID` | seu chat id | |
+
+Pontos importantes:
+
+- **Região fora dos EUA.** A Binance bloqueia acessos vindos dos Estados Unidos, então o serviço precisa rodar numa região da Europa ou da Ásia (por exemplo, Amsterdã).
+- **Volume em `/data`.** Guarda o histórico de velas e o banco de operações entre reinícios e novos deploys.
+- **Deploy automático.** Cada push na branch `main` gera um novo deploy.
+- **Fluxo recomendado:** primeiro rode com `BOT_MODE=backtest` e leia o relatório nos logs; depois troque para `BOT_MODE=trade` para ligar o bot em simulação.
 
 ---
 
@@ -147,7 +170,9 @@ Só depois de semanas de simulação com resultados que façam sentido:
 
 ```
 .
-├── docker-compose.yml                  # roda o Freqtrade em Docker
+├── docker-compose.yml                  # roda o Freqtrade em Docker no seu computador
+├── Dockerfile                          # imagem usada no Railway
+├── start.sh                            # escolhe entre backtest e bot (BOT_MODE)
 ├── .env.example                        # modelo dos segredos (Telegram e Binance)
 └── user_data/
     ├── config.json                     # configuração do bot (par, tempo gráfico, dry-run)
