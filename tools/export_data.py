@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
-CHUNK = 3500
+CHUNK = 6000
 
 
 def main() -> None:
@@ -35,9 +35,21 @@ def main() -> None:
         df["pair"] = pair
         frames.append(df[["pair", "date", "open", "high", "low", "close", "volume"]])
     data = pd.concat(frames, ignore_index=True)
+    # float32 + byte_stream_split + zstd forte: reduz bastante o tamanho do texto no log
+    for col in ("open", "high", "low", "close", "volume"):
+        data[col] = data[col].astype("float32")
+    data["pair"] = data["pair"].astype("category")
 
     buf = io.BytesIO()
-    data.to_parquet(buf, compression="zstd", index=False)
+    data.to_parquet(
+        buf,
+        engine="pyarrow",
+        compression="zstd",
+        compression_level=19,
+        use_byte_stream_split=["open", "high", "low", "close", "volume"],
+        use_dictionary=["pair"],
+        index=False,
+    )
     raw = buf.getvalue()
     digest = hashlib.sha256(raw).hexdigest()
     b64 = base64.b64encode(raw).decode()
