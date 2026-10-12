@@ -58,7 +58,7 @@ O `Dockerfile` e o `start.sh` deste repositório são usados pelo Railway. O com
 
 Pontos importantes:
 
-- **Região fora dos EUA.** A Binance bloqueia acessos vindos dos Estados Unidos, então o serviço precisa rodar numa região da Europa ou da Ásia (por exemplo, Amsterdã).
+- **Região fora dos EUA.** A Binance bloqueia acessos vindos dos Estados Unidos. Use Singapura (`asia-southeast1`): em Amsterdã o IP de saída compartilhado do Railway chegou a ser bloqueado pela Binance por excesso de requisições de outros usuários.
 - **Volume em `/data`.** Guarda o histórico de velas e o banco de operações entre reinícios e novos deploys.
 - **Deploy automático.** Cada push na branch `main` gera um novo deploy.
 - **Fluxo recomendado:** primeiro rode com `BOT_MODE=backtest` e leia o relatório nos logs; depois troque para `BOT_MODE=trade` para ligar o bot em simulação.
