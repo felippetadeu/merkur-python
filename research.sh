@@ -14,8 +14,9 @@ OUT="$DATA_DIR/out"
 mkdir -p "$DATA_DIR/data/binance" "$OUT"
 
 IS_RANGE="${IS_RANGE:-20210301-20240101}"
-OOS_RANGE="${OOS_RANGE:-20240101-}"
-RULE_STRATEGIES="${RULE_STRATEGIES:-CandlePatternStrategy CandleV2Context CandleV2Confirm CandleV2Regime CandleV2Trail}"
+OOS_RANGE="${OOS_RANGE:-20240101-20261010}"
+RULE_STRATEGIES="${RULE_STRATEGIES:-CandleV2Context CandleV2Regime CandleV2Trail CandleV2Wide}"
+DAILY_STRATEGY="${DAILY_STRATEGY:-CandleV2Daily}"
 RUN_FREQAI="${RUN_FREQAI:-true}"
 
 BASE=(
@@ -32,13 +33,19 @@ summary() {
   grep -m1 "Market change" "$file" || true
 }
 
+exit_reasons() {
+  # Imprime, para cada estratégia do relatório, a tabela de motivos de saída
+  local file="$1"
+  awk '/Result for strategy/{print} /EXIT REASON STATS/{p=1} p{print} /^└/{p=0}' "$file"
+}
+
 fail() {
   echo "!! Falhou: $1. Últimas linhas do log:" >&2
   tail -n 40 "$2" >&2
 }
 
-echo "== Baixando histórico (4h e 1d, desde 2019) =="
-if ! freqtrade download-data "${BASE[@]}" --timerange 20190101- -t 4h 1d > "$OUT/download.log" 2>&1; then
+echo "== Baixando histórico (4h, 1d e 1w, desde 2019) =="
+if ! freqtrade download-data "${BASE[@]}" --timerange 20190101- -t 4h 1d 1w > "$OUT/download.log" 2>&1; then
   fail "download" "$OUT/download.log"
   sleep infinity
 fi
@@ -54,23 +61,38 @@ for label in IS OOS; do
       --timerange "$range" --fee 0.001 --export none --cache none \
       > "$OUT/rules_$label.txt" 2> "$OUT/rules_$label.log"; then
     summary "$OUT/rules_$label.txt"
+    exit_reasons "$OUT/rules_$label.txt"
   else
     fail "backtest de regras ($label)" "$OUT/rules_$label.log"
+  fi
+
+  echo
+  echo "================ DIÁRIO ($DAILY_STRATEGY) - $title ================"
+  if freqtrade backtesting "${BASE[@]}" \
+      --strategy "$DAILY_STRATEGY" --timeframe 1d \
+      --timerange "$range" --fee 0.001 --export none --cache none \
+      > "$OUT/daily_$label.txt" 2> "$OUT/daily_$label.log"; then
+    awk '/STRATEGY SUMMARY/{p=1} p{print} /^└/{if(p){exit}}' "$OUT/daily_$label.txt"
+    awk '/EXIT REASON STATS/{p=1} p{print} /^└/{if(p){exit}}' "$OUT/daily_$label.txt"
+    grep -m1 "Market change" "$OUT/daily_$label.txt" || true
+  else
+    fail "backtest diário ($label)" "$OUT/daily_$label.log"
   fi
 done
 
 if [ "$RUN_FREQAI" = "true" ]; then
   echo
-  echo "================ FREQAI - 20210301- (retreino a cada 60 dias) ================"
+  echo "================ FREQAI - 20210301-20261010 (retreino a cada 60 dias) ================"
   echo "(pode levar vários minutos: treina um modelo por par a cada janela)"
   if freqtrade backtesting "${BASE[@]}" \
       --config /freqtrade/user_data/config-freqai.json \
       --strategy CandleFreqAIStrategy --freqaimodel LightGBMClassifier \
-      --timerange 20210301- --fee 0.001 --export none --cache none --breakdown year \
+      --timerange 20210301-20261010 --fee 0.001 --export none --cache none --breakdown year \
       > "$OUT/freqai.txt" 2> "$OUT/freqai.log"; then
     awk '/BACKTESTING REPORT/{p=1} p{print} /^└/{if(p){exit}}' "$OUT/freqai.txt"
     awk '/YEAR BREAKDOWN/{p=1} p{print} /^└/{if(p){exit}}' "$OUT/freqai.txt"
     awk '/ENTER TAG STATS/{p=1} p{print} /^└/{if(p){exit}}' "$OUT/freqai.txt"
+    awk '/EXIT REASON STATS/{p=1} p{print} /^└/{if(p){exit}}' "$OUT/freqai.txt"
     summary "$OUT/freqai.txt"
   else
     fail "backtest FreqAI" "$OUT/freqai.log"

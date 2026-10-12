@@ -63,7 +63,8 @@ class CandleProBase(IStrategy):
     INTERFACE_VERSION = 3
 
     timeframe = "4h"
-    informative_timeframe = "1d"
+    informative_timeframe = "1d"  # tendência maior do próprio par
+    btc_timeframe = "1d"  # regime do BTC
     can_short = False
 
     # Stop real é calculado em custom_stoploss; este é só um teto de segurança.
@@ -124,7 +125,7 @@ class CandleProBase(IStrategy):
         pairs = self.dp.current_whitelist() if self.dp else []
         stake = self.config.get("stake_currency", "USDT")
         inf = [(pair, self.informative_timeframe) for pair in pairs]
-        inf.append((f"BTC/{stake}", self.informative_timeframe))
+        inf.append((f"BTC/{stake}", self.btc_timeframe))
         return inf
 
     def _daily_context(self, pair: str) -> DataFrame:
@@ -138,7 +139,7 @@ class CandleProBase(IStrategy):
 
     def _btc_context(self) -> DataFrame:
         stake = self.config.get("stake_currency", "USDT")
-        btc = self.dp.get_pair_dataframe(pair=f"BTC/{stake}", timeframe=self.informative_timeframe)
+        btc = self.dp.get_pair_dataframe(pair=f"BTC/{stake}", timeframe=self.btc_timeframe)
         btc = btc[["date", "close"]].copy()
         btc["btc_ok"] = btc["close"] > ta.EMA(btc, timeperiod=50)
         return btc[["date", "btc_ok"]]
@@ -166,7 +167,8 @@ class CandleProBase(IStrategy):
         dataframe = merge_informative_pair(
             dataframe, daily, self.timeframe, self.informative_timeframe, ffill=True
         )
-        dataframe["trend_ok"] = dataframe["trend_ok_1d"].fillna(False).astype(bool)
+        trend_col = f"trend_ok_{self.informative_timeframe}"
+        dataframe["trend_ok"] = dataframe[trend_col].fillna(False).astype(bool)
 
         # Regime do BTC
         btc = self._btc_context()
@@ -174,7 +176,7 @@ class CandleProBase(IStrategy):
             dataframe,
             btc,
             self.timeframe,
-            self.informative_timeframe,
+            self.btc_timeframe,
             ffill=True,
             append_timeframe=False,
             suffix="btc1d",
@@ -344,3 +346,28 @@ class CandleV2Trail(CandleProBase):
     use_confirmation = True
     use_btc_regime = True
     exit_mode = "trail"
+
+
+class CandleV2Wide(CandleProBase):
+    """Contexto + suporte, SEM breakeven: o trailing de 3 ATR só começa em 1,5R.
+
+    Testa a hipótese de que mover o stop para a entrada em 1R tira o trade
+    nos recuos normais de cripto, antes da alta continuar."""
+
+    exit_mode = "trail"
+    breakeven_r = 99.0
+    trail_start_r = 1.5
+
+
+class CandleV2Daily(CandleProBase):
+    """A lógica da v2 Contexto no gráfico DIÁRIO, com a tendência medida no semanal.
+
+    Nos livros de candles, os padrões são lidos sobretudo no diário: cada vela
+    resume um dia inteiro de negociação e tem muito menos ruído que a de 4h."""
+
+    timeframe = "1d"
+    informative_timeframe = "1w"
+    btc_timeframe = "1w"
+    max_hold_candles = 20  # 20 dias
+    max_risk = 0.12  # velas diárias são maiores; aceita stop um pouco mais longe
+    startup_candle_count: int = 400
