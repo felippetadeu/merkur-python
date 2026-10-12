@@ -1,0 +1,11 @@
+{
+    "timeframe": "1d",
+    "max_open_trades": 12,
+    "dry_run_wallet": 1000,
+    "exchange": {
+        "pair_whitelist": [
+            "BTC/USDT", "ETH/USDT", "BNB/USDT", "XRP/USDT", "SOL/USDT", "ADA/USDT",
+            "DOGE/USDT", "LTC/USDT", "LINK/USDT", "AVAX/USDT", "TRX/USDT", "DOT/USDT"
+        ]
+    }
+}

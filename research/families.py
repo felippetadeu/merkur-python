@@ -61,7 +61,7 @@ def bullish_candle(df: pd.DataFrame) -> pd.Series:
 
 # ------------------------------------------------------------- famílias
 def donchian(df, pair, data, entry_n=20, exit_n=10, atr_stop=2.5, atr_trail=None,
-             regime_n=None, min_hist=60, **_):
+             regime_n=None, min_hist=60, regime_exit=False, **_):
     """A. Rompimento: fecha acima da máxima de entry_n dias; sai abaixo da mínima de exit_n."""
     a = atr(df)
     hh = df["high"].rolling(entry_n).max().shift(1)
@@ -74,10 +74,12 @@ def donchian(df, pair, data, entry_n=20, exit_n=10, atr_stop=2.5, atr_trail=None
     if atr_trail:
         chand = df["close"].rolling(entry_n).max() - atr_trail * a
         trail = np.maximum(trail, chand)
+    exit_ = ~btc_regime(data, df.index, regime_n) if (regime_n and regime_exit) else None
     return Signals(
         enter=enter,
         stop=df["close"] - atr_stop * a,
         trail=trail,
+        exit=exit_,
         tag=pd.Series("rompimento", index=df.index),
     )
 
@@ -118,16 +120,17 @@ def pullback(df, pair, data, trend_n=100, rsi_n=2, rsi_buy=10, rsi_sell=70, atr_
 
 
 def breakout_candle(df, pair, data, entry_n=20, exit_n=10, atr_stop=2.5, regime_n=100,
-                    vol_mult=1.0, **_):
+                    vol_mult=1.0, regime_exit=False, body_min=0.5, close_pos=0.67, **_):
     """E. Mistura: rompimento de Donchian confirmado por vela forte (corpo > 50% da
     amplitude, fechando no terço superior) e volume acima da média, com BTC em alta."""
     o, h, l, c, v = df["open"], df["high"], df["low"], df["close"], df["volume"]
     rng = (h - l).replace(0, np.nan)
-    strong = ((c - o) / rng > 0.5) & ((c - l) / rng > 0.67)
+    strong = ((c - o) / rng > body_min) & ((c - l) / rng > close_pos)
     hh = h.rolling(entry_n).max().shift(1)
     enter = (c > hh) & strong & (v > v.rolling(20).mean() * vol_mult)
     if regime_n:
         enter &= btc_regime(data, df.index, regime_n)
     a = atr(df)
-    return Signals(enter=enter, stop=c - atr_stop * a, trail=l.rolling(exit_n).min(),
+    exit_ = ~btc_regime(data, df.index, regime_n) if (regime_n and regime_exit) else None
+    return Signals(enter=enter, stop=c - atr_stop * a, trail=l.rolling(exit_n).min(), exit=exit_,
                    tag=pd.Series("rompimento_candle", index=df.index))

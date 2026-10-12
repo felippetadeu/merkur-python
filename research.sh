@@ -61,6 +61,34 @@ if [ "${RESEARCH_MODE:-backtest}" = "export" ]; then
   sleep infinity
 fi
 
+if [ "${RESEARCH_MODE:-backtest}" = "trend" ]; then
+  # Confirmação no Freqtrade das estratégias de tendência (gráfico diário, 12 pares)
+  TREND=(--config /freqtrade/user_data/config-trend.json)
+  TREND_STRATEGIES="${TREND_STRATEGIES:-TrendBreakout TrendBreakoutCandle}"
+  TREND_PERIODS="${TREND_PERIODS:-P1:20190901-20230101 P2:20230101-20250101}"
+  echo "== Baixando histórico diário dos 12 pares =="
+  if ! freqtrade download-data "${BASE[@]}" "${TREND[@]}" --timerange 20190101- -t 1d > "$OUT/download.log" 2>&1; then
+    fail "download" "$OUT/download.log"; sleep infinity
+  fi
+  for item in $TREND_PERIODS; do
+    label="${item%%:*}"; range="${item#*:}"
+    echo
+    echo "================ TENDÊNCIA - $label $range ================"
+    # shellcheck disable=SC2086
+    if freqtrade backtesting "${BASE[@]}" "${TREND[@]}" --strategy-list $TREND_STRATEGIES \
+        --timerange "$range" --fee 0.001 --export none --cache none --breakdown year \
+        > "$OUT/trend_$label.txt" 2> "$OUT/trend_$label.log"; then
+      summary "$OUT/trend_$label.txt"
+      exit_reasons "$OUT/trend_$label.txt"
+      awk '/Result for strategy/{print} /SUMMARY METRICS/{p=1} p&&/(CAGR|Max % of account underwater|Profit factor|Total profit %|Total\/Daily Avg Trades)/{print} /^└/{p=0}' "$OUT/trend_$label.txt"
+    else
+      fail "backtest de tendência ($label)" "$OUT/trend_$label.log"
+    fi
+  done
+  echo "== TENDÊNCIA CONCLUÍDA =="
+  sleep infinity
+fi
+
 echo "== Baixando histórico (4h, 1d e 1w, desde 2019) =="
 if ! freqtrade download-data "${BASE[@]}" --timerange 20190101- -t 4h 1d 1w > "$OUT/download.log" 2>&1; then
   fail "download" "$OUT/download.log"
