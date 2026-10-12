@@ -13,6 +13,14 @@ TIMEFRAME="${TIMEFRAME:-4h}"
 TIMERANGE="${BACKTEST_TIMERANGE:-20220101-}"
 STRATEGY="${STRATEGY:-CandlePatternStrategy}"
 
+# No Railway o container roda como root (RAILWAY_RUN_UID=0) para poder gravar no volume.
+# A imagem do Freqtrade instala os pacotes na pasta do usuário ftuser, então o root
+# precisa ser apontado para ela; sem isso o Python não encontra o módulo freqtrade.
+if [ "$(id -u)" = "0" ] && [ -d /home/ftuser/.local ]; then
+  export PYTHONUSERBASE=/home/ftuser/.local
+  export PATH="/home/ftuser/.local/bin:$PATH"
+fi
+
 mkdir -p "$DATA_DIR/data"
 
 COMMON=(
