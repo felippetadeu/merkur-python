@@ -4,6 +4,7 @@ FROM freqtradeorg/freqtrade:stable_freqai
 
 COPY --chown=ftuser:ftuser user_data/ /freqtrade/user_data/
 COPY --chown=ftuser:ftuser research.sh /freqtrade/research.sh
+COPY --chown=ftuser:ftuser tools/ /freqtrade/tools/
 
 ENV DATA_DIR=/tmp/research
 

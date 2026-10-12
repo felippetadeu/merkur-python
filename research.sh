@@ -44,6 +44,23 @@ fail() {
   tail -n 40 "$2" >&2
 }
 
+if [ "${RESEARCH_MODE:-backtest}" = "export" ]; then
+  # Baixa o histórico e imprime no log (em blocos) para análise fora do container
+  EXPORT_PAIRS="${EXPORT_PAIRS:-BTC/USDT ETH/USDT BNB/USDT XRP/USDT SOL/USDT ADA/USDT DOGE/USDT LTC/USDT LINK/USDT AVAX/USDT}"
+  EXPORT_TF="${EXPORT_TF:-4h}"
+  echo "== Exportando $EXPORT_TF de: $EXPORT_PAIRS =="
+  # shellcheck disable=SC2086
+  if freqtrade download-data "${BASE[@]}" --pairs $EXPORT_PAIRS --timerange 20190101- -t "$EXPORT_TF" \
+      > "$OUT/download.log" 2>&1; then
+    # shellcheck disable=SC2086
+    python /freqtrade/tools/export_data.py "$DATA_DIR/data/binance" "$EXPORT_TF" $EXPORT_PAIRS
+  else
+    fail "download" "$OUT/download.log"
+  fi
+  echo "== EXPORTAÇÃO CONCLUÍDA =="
+  sleep infinity
+fi
+
 echo "== Baixando histórico (4h, 1d e 1w, desde 2019) =="
 if ! freqtrade download-data "${BASE[@]}" --timerange 20190101- -t 4h 1d 1w > "$OUT/download.log" 2>&1; then
   fail "download" "$OUT/download.log"
