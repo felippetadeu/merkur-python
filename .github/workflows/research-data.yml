@@ -33,6 +33,12 @@ jobs:
           python tools/fetch_binance_vision.py research_data 1h,4h,1d \
             BTCUSDT,ETHUSDT,BNBUSDT,XRPUSDT,SOLUSDT,ADAUSDT,DOGEUSDT,LTCUSDT,LINKUSDT,AVAXUSDT,TRXUSDT,DOTUSDT \
             2019-01
+          # Universo amplo (inclui moedas que colapsaram ou saíram da Binance), só no diário,
+          # para medir o viés de sobrevivência
+          python tools/fetch_binance_vision.py research_data_wide 1d \
+            BTCUSDT,ETHUSDT,BNBUSDT,XRPUSDT,SOLUSDT,ADAUSDT,DOGEUSDT,LTCUSDT,LINKUSDT,AVAXUSDT,TRXUSDT,DOTUSDT,LUNAUSDT,FTTUSDT,EOSUSDT,XLMUSDT,BCHUSDT,ATOMUSDT,FILUSDT,ICPUSDT,MATICUSDT,UNIUSDT,AAVEUSDT,SANDUSDT,MANAUSDT,AXSUSDT,CHZUSDT,THETAUSDT,ALGOUSDT,XTZUSDT,WAVESUSDT,ZECUSDT \
+            2019-01
+          mv research_data_wide/binance_1d.parquet research_data/binance_1d_wide.parquet
           ls -la research_data
 
       - name: Publicar na branch research-data
