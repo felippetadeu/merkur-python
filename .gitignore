@@ -1,0 +1,24 @@
+# Segredos
+.env
+user_data/config-private.json
+
+# Dados gerados pelo Freqtrade
+user_data/data/
+user_data/logs/
+user_data/backtest_results/
+user_data/hyperopt_results/
+user_data/plot/
+user_data/notebooks/
+user_data/*.sqlite
+user_data/*.sqlite-*
+*.sqlite
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Sistema
+.DS_Store
+Thumbs.db
