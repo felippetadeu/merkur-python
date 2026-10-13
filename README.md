@@ -1,81 +1,87 @@
 # candle-bot
 
-Bot de trading para **ETH/USDT na Binance**, no gráfico de **4 horas**, baseado em **padrões de candle** (velas japonesas) e construído sobre o [Freqtrade](https://www.freqtrade.io).
+Bot de trading **seguidor de tendência** para a Binance spot, construído sobre o [Freqtrade](https://www.freqtrade.io). Opera no gráfico **diário**, em 12 criptomoedas, e usa os **candles como confirmação**: só compra um rompimento quando a vela do rompimento é forte e vem com volume.
 
-Ele começa em **modo simulação** (dry-run): opera com uma carteira fictícia de 1.000 USDT, usando preços reais, sem precisar de chave de API e sem arriscar dinheiro. Cada entrada e saída é avisada no **Telegram**, com o nome do padrão que gerou o sinal.
+Ele roda em **modo simulação** (dry-run): opera com uma carteira fictícia de 1.000 USDT, usando preços reais, sem chave de API e sem arriscar dinheiro. Cada entrada e saída é avisada no **Telegram**.
 
-> **Aviso:** padrões de candle indicam probabilidades, não certezas. Este projeto é um estudo. Não é recomendação de investimento. Faça backtest, deixe rodar em simulação por semanas e só considere dinheiro real se entender e aceitar o risco.
-
----
-
-## Pesquisa de estratégias
-
-Além da estratégia original, o repositório tem:
-
-- [`CandleProStrategy.py`](user_data/strategies/CandleProStrategy.py): a versão 2, que só compra padrões a favor da tendência do diário e num suporte, com stop abaixo do padrão e saídas medidas em R (múltiplos do risco). As subclasses ligam cada peça separadamente: confirmação, regime do BTC, trailing, sem breakeven e gráfico diário.
-- [`CandleFreqAIStrategy.py`](user_data/strategies/CandleFreqAIStrategy.py): as mesmas regras, com um modelo LightGBM do FreqAI como filtro. O modelo recebe a anatomia das velas e o contexto e estima a chance de o preço subir 2 ATR antes de cair 1 ATR. Ele é retreinado a cada 60 dias, de modo que cada período é previsto por um modelo que não viu aqueles dados.
-- [`research.sh`](research.sh) e [`Dockerfile.research`](Dockerfile.research): o serviço de pesquisa do Railway. Ele roda todas as variantes em ETH, BTC, BNB e XRP, com taxa de 0,1%, separando um período de desenvolvimento (mar/2021 a dez/2023) de um período de validação (jan/2024 a out/2026).
-
-Resultados de 12/10/2026 (lucro total, 1.000 USDT iniciais):
-
-| Variante | Desenvolvimento | Validação |
-|---|---|---|
-| v1 original | −37,4% | −37,4% |
-| v2 Contexto | −5,9% | −10,6% |
-| v2 Regime BTC | −6,4% | −8,4% |
-| v2 Trailing | −6,8% | −7,2% |
-| v2 sem breakeven | −4,6% | −10,6% |
-| v2 no diário | −14,7% | −16,4% |
-| v2 + FreqAI | +3,0% | −2,9% |
-| Comprar e segurar (média dos 4 pares) | +33% | +94% |
-
-Nenhuma variante mostrou vantagem consistente. A v2 corta a perda e o drawdown da v1 em cerca de 80%, e o filtro do FreqAI fica perto do zero a zero (41 operações, drawdown de 6,4%), mas nenhuma supera simplesmente comprar e segurar.
+> **Aviso:** resultados passados não garantem resultados futuros. Este projeto é um estudo, não uma recomendação de investimento. Deixe rodar em simulação por semanas e só considere dinheiro real se entender e aceitar o risco.
 
 ---
 
-## Como a estratégia funciona
+## A estratégia: `TrendBreakoutLiquid`
 
-A estratégia fica em [`user_data/strategies/CandlePatternStrategy.py`](user_data/strategies/CandlePatternStrategy.py) e usa a TA-Lib para detectar os padrões. O Freqtrade só analisa **velas fechadas**, então nenhum sinal é gerado por uma vela ainda em formação.
+Arquivo: [`user_data/strategies/TrendBreakoutStrategy.py`](user_data/strategies/TrendBreakoutStrategy.py).
 
-**Compra** quando aparecem ao mesmo tempo:
-
-| Condição | Detalhe |
+| Regra | Detalhe |
 |---|---|
-| Padrão de reversão de alta | martelo, engolfo de alta, estrela da manhã ou linha de perfuração |
-| Contexto de queda | RSI(14) abaixo de 45 |
-| Volume confirmando | volume da vela acima da média das últimas 20 velas |
+| Universo | BTC, ETH, BNB, XRP, SOL, ADA, DOGE, LTC, LINK, AVAX, TRX e DOT (contra USDT) |
+| Liquidez | só opera as **6 moedas mais negociadas** dos últimos 90 dias (ranking refeito todo dia com dados passados) |
+| Regime | só compra com o **BTC acima da média de 100 dias** |
+| Entrada | fechamento acima da **máxima dos últimos 30 dias** (rompimento) |
+| Confirmação por candle | a vela do rompimento precisa ter **corpo maior que 50% da amplitude**, **fechar no terço superior** e ter **volume acima da média de 20 dias** |
+| Stop inicial | **2,5 ATR** abaixo do fechamento do rompimento |
+| Stop móvel | sobe para a **mínima dos últimos 10 dias** e nunca desce |
+| Saída | só pelo stop: a tendência corre enquanto durar |
+| Tamanho da posição | arrisca **1,5% do saldo** até o stop inicial, limitado a 1/6 do saldo |
+| Vagas | no máximo **6 posições** ao mesmo tempo |
 
-**Vende** quando acontece qualquer um destes:
+### Resultado no Freqtrade (backtest, taxa de 0,1% por lado)
 
-| Condição | Detalhe |
-|---|---|
-| Padrão de reversão de baixa | estrela cadente, engolfo de baixa, estrela da tarde, nuvem negra ou enforcado, com RSI acima de 55 |
-| Sobrecompra extrema | RSI acima de 78 |
-| Stoploss | perda de 6% |
-| Trailing stop | depois de 4% de lucro, protege o ganho a 2% do topo |
-| ROI mínimo | 12% de lucro a qualquer momento; o alvo cai para 6% após 2 dias, 3% após 4 dias e zero a zero após 8 dias |
+| Período | Lucro total | Ao ano | Drawdown máx. | Profit factor | Operações | Mercado (comprar e segurar) |
+|---|---|---|---|---|---|---|
+| set/2019 – dez/2022 | +170% | 34,7% | 21,0% | 3,94 | 68 | +483% |
+| 2023 – 2024 | +135% | 53,3% | 18,9% | 4,29 | 56 | +410% |
+| 2025 – out/2026 | +5,1% | 2,9% | 12,5% | 1,28 | 36 | −38% |
 
-Todos esses números são pontos de partida. Ajuste-os depois de ver o resultado do backtest.
+A estratégia ganha bem menos que comprar e segurar nos mercados de alta, e protege o capital nos de baixa: em 2025–26 as 12 moedas caíram 38% em média, e ela terminou positiva, com drawdown de 12,5%.
 
 ---
 
-## Onde rodar
+## Como ela foi encontrada
 
-Há duas formas, e nenhuma exige instalar Python ou TA-Lib (a imagem oficial do Freqtrade já traz tudo):
+A pesquisa está toda em [`research/`](research/) e seguiu um protocolo definido **antes** de olhar os resultados:
 
-- **Railway (nuvem):** o bot fica ligado 24 horas sem depender do seu computador. Veja a seção [Rodar no Railway](#rodar-no-railway).
-- **No seu computador:** precisa do [Docker](https://docs.docker.com/get-docker/) com Docker Compose (no Windows e no Mac, o Docker Desktop já inclui os dois). Siga a partir de [Instalação](#instalação).
+- **Três períodos:** desenvolvimento (set/2019 a dez/2022), validação (2023–24) e teste final (2025 a out/2026).
+- **Aprovação:** retorno anual ≥ 15%, drawdown ≤ 25%, profit factor ≥ 1,3 e ≥ 40 operações nos dois primeiros períodos; resultado positivo com drawdown ≤ 25% no teste final.
+- **Robustez:** os vizinhos dos parâmetros (±20% em cada um) também precisam passar.
+- **Viés de sobrevivência:** a mesma estratégia, sem mudanças, foi testada num universo de 32 moedas, incluindo as que colapsaram ou saíram da Binance (LUNA, FTT, WAVES, MATIC e outras).
+
+O que foi testado e descartado:
+
+| Família | Resultado |
+|---|---|
+| Padrões de **reversão** por candle (v1, v2 e variações) | perdem dinheiro em todos os períodos |
+| Padrões de candle + **FreqAI** (LightGBM como filtro) | zero a zero, sem vantagem consistente |
+| Reversão à média (RSI(2), Bandas de Bollinger, IBS) | positiva, mas fraca demais |
+| Rotação por momentum | lucrativa, mas com drawdown de 45–60% |
+| Rompimento sem filtro de liquidez | excelente até 2024, negativo em 2025–26 |
+| **Rompimento + vela forte + liquidez + risco de 1,5%** | **aprovado em tudo** |
+
+Robustez da estratégia final:
+
+- **84%** dos 243 vizinhos de parâmetros passam em todos os critérios, nos três períodos e nos dois universos.
+- **100%** deles são positivos no teste final.
+- No universo de 32 moedas, o teste final dá **+13,6% ao ano**.
+
+Ferramentas da pesquisa:
+
+- [`research/lab.py`](research/lab.py), [`research/slots.py`](research/slots.py) e [`research/families.py`](research/families.py): laboratório rápido em pandas que reproduz as regras do Freqtrade (sinais idênticos, retornos próximos).
+- [`.github/workflows/research-data.yml`](.github/workflows/research-data.yml): baixa o histórico do repositório público da Binance (data.binance.vision) para a branch `research-data`.
+- [`research.sh`](research.sh) e [`Dockerfile.research`](Dockerfile.research): serviço do Railway que roda os backtests de confirmação no Freqtrade.
+
+As estratégias antigas continuam no repositório para referência: [`CandlePatternStrategy.py`](user_data/strategies/CandlePatternStrategy.py), [`CandleProStrategy.py`](user_data/strategies/CandleProStrategy.py) e [`CandleFreqAIStrategy.py`](user_data/strategies/CandleFreqAIStrategy.py).
 
 ---
 
 ## Rodar no Railway
 
-O `Dockerfile` e o `start.sh` deste repositório são usados pelo Railway. O comportamento é controlado por variáveis do serviço:
+O `Dockerfile` e o `start.sh` são usados pelo Railway. O comportamento é controlado por variáveis do serviço:
 
 | Variável | Valor | Para quê |
 |---|---|---|
-| `BOT_MODE` | `backtest`, `trade` ou `pause` | `backtest` baixa o histórico e imprime o relatório no log; `trade` liga o bot; `pause` deixa o serviço parado sem acessar a Binance |
-| `BACKTEST_TIMERANGE` | ex.: `20220101-` | período do backtest (opcional) |
+| `BOT_MODE` | `trade`, `backtest` ou `pause` | `trade` liga o bot; `backtest` imprime um relatório no log; `pause` deixa o serviço parado sem acessar a Binance |
+| `STRATEGY` | padrão `TrendBreakoutLiquid` | estratégia a usar |
+| `EXTRA_CONFIGS` | padrão `config-trend.json config-liquid.json` | configurações aplicadas por cima do `config.json` |
 | `RAILWAY_RUN_UID` | `0` | necessário para o Freqtrade gravar no volume |
 | `FREQTRADE__TELEGRAM__ENABLED` | `true` | liga os avisos no Telegram |
 | `FREQTRADE__TELEGRAM__TOKEN` | token do @BotFather | |
@@ -83,29 +89,27 @@ O `Dockerfile` e o `start.sh` deste repositório são usados pelo Railway. O com
 
 Pontos importantes:
 
-- **Região fora dos EUA.** A Binance bloqueia acessos vindos dos Estados Unidos. Use Singapura (`asia-southeast1`): em Amsterdã o IP de saída compartilhado do Railway chegou a ser bloqueado pela Binance por excesso de requisições de outros usuários.
-- **Volume em `/data`.** Guarda o histórico de velas e o banco de operações entre reinícios e novos deploys.
-- **Deploy automático.** Cada push na branch `main` gera um novo deploy.
-- **Fluxo recomendado:** primeiro rode com `BOT_MODE=backtest` e leia o relatório nos logs; depois troque para `BOT_MODE=trade` para ligar o bot em simulação.
+- **Região fora dos EUA.** A Binance bloqueia acessos vindos dos Estados Unidos. Use Singapura (`asia-southeast1`): em Amsterdã, o IP de saída compartilhado do Railway chegou a ser bloqueado pela Binance por excesso de requisições de outros usuários.
+- **Volume em `/data`.** Guarda o histórico e o banco de operações (`tradesv3-trend.sqlite`) entre reinícios.
 
 ---
 
-## Instalação
+## Rodar no seu computador
+
+Precisa do [Docker](https://docs.docker.com/get-docker/) com Docker Compose.
 
 ```bash
 git clone <url-deste-repositorio>
 cd <pasta-do-repositorio>
-cp .env.example .env
+cp .env.example .env      # no Windows (PowerShell): copy .env.example .env
 ```
 
-No Windows (PowerShell), use `copy .env.example .env` no lugar do `cp`.
+Para os avisos no Telegram:
 
-### Configurar o Telegram
-
-1. No Telegram, abra o **@BotFather**, envie `/newbot` e siga as instruções. Ele vai te dar um **token**.
-2. Abra o **@userinfobot** e envie qualquer mensagem. Ele responde com o seu **chat id** (um número).
-3. Abra uma conversa com o bot que você acabou de criar e envie `/start`, para que ele possa te mandar mensagens.
-4. Preencha o `.env`:
+1. No **@BotFather**, envie `/newbot` e guarde o token.
+2. No **@userinfobot**, descubra o seu chat id.
+3. Envie `/start` para o seu bot.
+4. Preencha o `.env`.
 
 ```env
 FREQTRADE__TELEGRAM__ENABLED=true
@@ -113,81 +117,34 @@ FREQTRADE__TELEGRAM__TOKEN=123456789:ABCdef...
 FREQTRADE__TELEGRAM__CHAT_ID=987654321
 ```
 
-O token fica só no `.env`, que está no `.gitignore` e nunca vai para o GitHub.
-
----
-
-## 1. Baixar o histórico
+Backtest:
 
 ```bash
 docker compose run --rm freqtrade download-data \
   --config /freqtrade/user_data/config.json \
-  --timerange 20220101- \
-  -t 4h
-```
+  --config /freqtrade/user_data/config-trend.json \
+  --timerange 20190101- -t 1d
 
-Isso baixa as velas de 4h do ETH/USDT desde janeiro de 2022 para `user_data/data/`.
-
-## 2. Rodar o backtest
-
-```bash
 docker compose run --rm freqtrade backtesting \
   --config /freqtrade/user_data/config.json \
-  --strategy CandlePatternStrategy \
-  --timerange 20220101- \
-  --breakdown month
+  --config /freqtrade/user_data/config-trend.json \
+  --config /freqtrade/user_data/config-liquid.json \
+  --strategy TrendBreakoutLiquid \
+  --timerange 20230101-20250101 --fee 0.001 --breakdown year
 ```
 
-O relatório mostra o lucro total, a taxa de acerto, o drawdown máximo e, na tabela **Enter Tag**, o resultado separado por padrão (martelo, engolfo de alta etc.). É ali que você descobre quais padrões realmente funcionam no ETH.
-
-Compare sempre com o resultado de simplesmente comprar e segurar no mesmo período (linha *Market change* do relatório).
-
-## 3. Rodar em simulação
-
-```bash
-docker compose up -d
-```
-
-O bot fica rodando em segundo plano e reinicia sozinho se o computador ou o Docker reiniciar. Você deve receber uma mensagem de início no Telegram.
-
-Comandos úteis:
-
-```bash
-docker compose logs -f     # acompanhar o log
-docker compose down        # parar o bot
-docker compose pull        # atualizar o Freqtrade (depois rode "docker compose up -d")
-```
-
-No Telegram, o bot responde a comandos como `/status`, `/profit`, `/balance`, `/daily`, `/performance` e `/help`.
-
----
-
-## Otimizar os parâmetros (opcional)
-
-Os limites de RSI e o fator de volume podem ser otimizados automaticamente com o hyperopt:
-
-```bash
-docker compose run --rm freqtrade hyperopt \
-  --config /freqtrade/user_data/config.json \
-  --strategy CandlePatternStrategy \
-  --hyperopt-loss SharpeHyperOptLoss \
-  --spaces buy sell \
-  --timerange 20220101-20250101 \
-  -e 300
-```
-
-Otimize num período e confira o resultado com um backtest em **outro** período (por exemplo, de 2025 em diante). Parâmetros que só funcionam no período em que foram otimizados não valem nada no mercado real.
+Simulação: `docker compose up -d`. No Telegram, o bot responde a `/status`, `/profit`, `/balance`, `/daily`, `/performance` e `/help`.
 
 ---
 
 ## Operar com dinheiro real
 
-Só depois de semanas de simulação com resultados que façam sentido:
+Só depois de semanas de simulação com resultados coerentes com o backtest:
 
-1. Na Binance, crie uma chave de API com permissão **apenas de leitura e de spot trading**. **Nunca** ative a permissão de saque e, se possível, restrinja a chave ao IP da sua máquina.
-2. Preencha `FREQTRADE__EXCHANGE__KEY` e `FREQTRADE__EXCHANGE__SECRET` no `.env`.
-3. Em `user_data/config.json`, troque `"dry_run": true` por `"dry_run": false` e ajuste o `stake_amount` para o valor que você aceita arriscar.
-4. Reinicie com `docker compose up -d`.
+1. Na Binance, crie uma chave de API com permissão **apenas de leitura e de spot trading**. **Nunca** ative saques, e restrinja a chave ao IP do servidor, se possível.
+2. Preencha `FREQTRADE__EXCHANGE__KEY` e `FREQTRADE__EXCHANGE__SECRET` (no `.env` ou nas variáveis do Railway).
+3. Em `user_data/config.json`, troque `"dry_run": true` por `"dry_run": false`.
+4. Reinicie o bot.
 
 ---
 
@@ -195,14 +152,17 @@ Só depois de semanas de simulação com resultados que façam sentido:
 
 ```
 .
-├── docker-compose.yml                  # roda o Freqtrade em Docker no seu computador
-├── Dockerfile                          # imagem usada no Railway
-├── start.sh                            # escolhe entre backtest e bot (BOT_MODE)
-├── .env.example                        # modelo dos segredos (Telegram e Binance)
+├── docker-compose.yml               # roda o bot em Docker no seu computador
+├── Dockerfile / start.sh            # imagem e inicialização no Railway
+├── Dockerfile.research / research.sh  # serviço de pesquisa no Railway
+├── research/                        # laboratório de pesquisa (backtester rápido)
+├── tools/                           # download do histórico e exportação
 └── user_data/
-    ├── config.json                     # configuração do bot (par, tempo gráfico, dry-run)
+    ├── config.json                  # configuração base (dry-run, Telegram)
+    ├── config-trend.json            # gráfico diário e os 12 pares
+    ├── config-liquid.json           # 6 vagas
     └── strategies/
-        └── CandlePatternStrategy.py    # a estratégia de padrões de candle
+        └── TrendBreakoutStrategy.py # a estratégia atual
 ```
 
 Documentação do Freqtrade: https://www.freqtrade.io/en/stable/

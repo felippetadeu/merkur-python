@@ -9,9 +9,12 @@ set -euo pipefail
 
 MODE="${BOT_MODE:-trade}"
 DATA_DIR="${DATA_DIR:-/data}"
-TIMEFRAME="${TIMEFRAME:-4h}"
+TIMEFRAME="${TIMEFRAME:-1d}"
 TIMERANGE="${BACKTEST_TIMERANGE:-20220101-}"
-STRATEGY="${STRATEGY:-CandlePatternStrategy}"
+STRATEGY="${STRATEGY:-TrendBreakoutLiquid}"
+# Configurações adicionais (em user_data/), aplicadas por cima do config.json
+EXTRA_CONFIGS="${EXTRA_CONFIGS:-config-trend.json config-liquid.json}"
+DB_NAME="${DB_NAME:-tradesv3-trend.sqlite}"
 
 # No Railway o container roda como root (RAILWAY_RUN_UID=0) para poder gravar no volume.
 # A imagem do Freqtrade instala os pacotes na pasta do usuário ftuser, então o root
@@ -26,8 +29,11 @@ mkdir -p "$DATA_DIR/data"
 COMMON=(
   --userdir /freqtrade/user_data
   --config /freqtrade/user_data/config.json
-  --datadir "$DATA_DIR/data/binance"
 )
+for cfg in $EXTRA_CONFIGS; do
+  COMMON+=(--config "/freqtrade/user_data/$cfg")
+done
+COMMON+=(--datadir "$DATA_DIR/data/binance")
 
 run_backtest() {
   echo "== Baixando histórico ($TIMEFRAME, $TIMERANGE) =="
@@ -62,7 +68,7 @@ case "$MODE" in
   trade)
     exec freqtrade trade "${COMMON[@]}" \
       --strategy "$STRATEGY" \
-      --db-url "sqlite:///$DATA_DIR/tradesv3.sqlite"
+      --db-url "sqlite:///$DATA_DIR/$DB_NAME"
     ;;
 
   *)
