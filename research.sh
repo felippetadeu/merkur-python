@@ -64,6 +64,7 @@ fi
 if [ "${RESEARCH_MODE:-backtest}" = "trend" ]; then
   # Confirmação no Freqtrade das estratégias de tendência (gráfico diário, 12 pares)
   TREND=(--config /freqtrade/user_data/config-trend.json)
+  if [ -n "${TREND_EXTRA_CONFIG:-}" ]; then TREND+=(--config "/freqtrade/user_data/$TREND_EXTRA_CONFIG"); fi
   TREND_STRATEGIES="${TREND_STRATEGIES:-TrendBreakout TrendBreakoutCandle}"
   TREND_PERIODS="${TREND_PERIODS:-P1:20190901-20230101 P2:20230101-20250101}"
   echo "== Baixando histórico diário dos 12 pares =="

@@ -158,3 +158,77 @@ class TrendBreakoutCandle(TrendBreakout):
     """Rompimento confirmado por vela forte e volume acima da média."""
 
     use_candle = True
+
+
+class TrendBreakoutLiquid(TrendBreakoutCandle):
+    """Versão final da pesquisa: rompimento + vela forte, só nas moedas mais negociadas,
+    com o tamanho de cada posição definido pelo risco até o stop.
+
+      - LIQUIDEZ: a cada dia, ordena os pares da lista pelo volume financeiro médio dos
+        últimos 90 dias (preço x volume) e só aceita rompimentos das `top_n` primeiras.
+        O ranking usa apenas dados passados.
+      - VAGAS: no máximo `top_n` posições ao mesmo tempo (max_open_trades no config).
+      - RISCO: cada operação arrisca no máximo `risk_per_trade` do saldo até o stop
+        inicial; o tamanho também fica limitado a saldo / vagas.
+    """
+
+    top_n = 6
+    liq_n = 90
+    risk_per_trade = 0.015
+
+    def _liquidity_rank(self) -> pd.DataFrame:
+        pairs = self.dp.current_whitelist()
+        cols = {}
+        for p in pairs:
+            d = self.dp.get_pair_dataframe(pair=p, timeframe=self.timeframe)
+            if d.empty:
+                continue
+            dv = (d["close"] * d["volume"]).rolling(self.liq_n, min_periods=self.liq_n // 2).mean()
+            cols[p] = pd.Series(dv.to_numpy(), index=d["date"])
+        table = pd.DataFrame(cols)
+        return table.rank(axis=1, ascending=False)
+
+    def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe = super().populate_indicators(dataframe, metadata)
+        rank = self._liquidity_rank()
+        pair = metadata["pair"]
+        if pair in rank.columns:
+            r = rank[pair].rename("liq_rank")
+            dataframe = dataframe.merge(r, left_on="date", right_index=True, how="left")
+        else:
+            dataframe["liq_rank"] = np.nan
+        return dataframe
+
+    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe = super().populate_entry_trend(dataframe, metadata)
+        not_liquid = ~(dataframe["liq_rank"] <= self.top_n)
+        dataframe.loc[not_liquid, "enter_long"] = 0
+        dataframe.loc[dataframe["enter_long"] == 1, "enter_tag"] = "rompimento_vela_liquido"
+        return dataframe
+
+    def custom_stake_amount(
+        self,
+        pair: str,
+        current_time: datetime,
+        current_rate: float,
+        proposed_stake: float,
+        min_stake: float | None,
+        max_stake: float,
+        leverage: float,
+        entry_tag: str | None,
+        side: str,
+        **kwargs,
+    ) -> float:
+        dataframe, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+        if dataframe.empty:
+            return proposed_stake
+        signal = dataframe.loc[dataframe["date"] < timeframe_to_prev_date(self.timeframe, current_time)]
+        if signal.empty:
+            return proposed_stake
+        stop = signal["entry_stop"].iloc[-1]
+        if pd.isna(stop) or stop >= current_rate:
+            return proposed_stake
+        dist = (current_rate - stop) / current_rate
+        total = self.wallets.get_total_stake_amount()
+        risk_stake = total * self.risk_per_trade / dist
+        return max(min(proposed_stake, risk_stake, max_stake), min_stake or 0)
