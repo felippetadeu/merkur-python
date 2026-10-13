@@ -1,0 +1,26 @@
+{
+    "webhook": {
+        "enabled": true,
+        "url": "",
+        "format": "form",
+        "retries": 3,
+        "retry_delay": 0.5,
+        "timeout": 10,
+        "entry": {
+            "chat_id": "",
+            "text": "[{bot_name}] Ordem de compra: {pair} a {open_rate:.6g} USDT ({stake_amount:.2f} USDT) | sinal: {enter_tag}"
+        },
+        "entry_fill": {
+            "chat_id": "",
+            "text": "[{bot_name}] Compra executada: {pair} a {open_rate:.6g} USDT"
+        },
+        "exit_fill": {
+            "chat_id": "",
+            "text": "[{bot_name}] Venda executada: {pair} a {close_rate:.6g} USDT | resultado {profit_ratio:.2%} ({profit_amount:.2f} USDT) | motivo: {exit_reason}"
+        },
+        "status": {
+            "chat_id": "",
+            "text": "[{bot_name}] {status}"
+        }
+    }
+}
