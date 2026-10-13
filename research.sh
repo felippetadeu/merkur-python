@@ -61,6 +61,35 @@ if [ "${RESEARCH_MODE:-backtest}" = "export" ]; then
   sleep infinity
 fi
 
+if [ "${RESEARCH_MODE:-backtest}" = "intraday" ]; then
+  # Confirmação no Freqtrade das estratégias intradiárias (4h e 1h, 12 pares)
+  INTRA_RUNS="${INTRA_RUNS:-Breakout4h:4h Breakout1h:1h}"
+  INTRA_PERIODS="${INTRA_PERIODS:-P1:20190901-20230101 P2:20230101-20250101 P3:20250101-20261011}"
+  TREND=(--config /freqtrade/user_data/config-trend.json)
+  echo "== Baixando histórico (1h, 4h e 1d) dos 12 pares =="
+  if ! freqtrade download-data "${BASE[@]}" "${TREND[@]}" --timerange 20190101- -t 1h 4h 1d > "$OUT/download.log" 2>&1; then
+    fail "download" "$OUT/download.log"; sleep infinity
+  fi
+  for run in $INTRA_RUNS; do
+    strat="${run%%:*}"; tf="${run#*:}"
+    for item in $INTRA_PERIODS; do
+      label="${item%%:*}"; range="${item#*:}"
+      echo
+      echo "================ $strat ($tf) - $label $range ================"
+      if freqtrade backtesting "${BASE[@]}" "${TREND[@]}" --config "/freqtrade/user_data/config-intraday-$tf.json" \
+          --strategy "$strat" --timerange "$range" --fee 0.001 --export none --cache none \
+          > "$OUT/${strat}_$label.txt" 2> "$OUT/${strat}_$label.log"; then
+        awk '/STRATEGY SUMMARY/{p=1} p{print} /^└/{if(p){exit}}' "$OUT/${strat}_$label.txt"
+        awk '/SUMMARY METRICS/{p=1} p&&/(CAGR|Max % of account underwater|Profit factor|Total profit %|Total\/Daily Avg Trades|Market change)/{print} /^└/{p=0}' "$OUT/${strat}_$label.txt"
+      else
+        fail "backtest $strat ($label)" "$OUT/${strat}_$label.log"
+      fi
+    done
+  done
+  echo "== INTRADIÁRIO CONCLUÍDO =="
+  sleep infinity
+fi
+
 if [ "${RESEARCH_MODE:-backtest}" = "trend" ]; then
   # Confirmação no Freqtrade das estratégias de tendência (gráfico diário, 12 pares)
   TREND=(--config /freqtrade/user_data/config-trend.json)
