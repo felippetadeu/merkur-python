@@ -37,6 +37,39 @@ A estratégia ganha bem menos que comprar e segurar nos mercados de alta, e prot
 
 ---
 
+## Estratégias intradiárias: `Breakout1h` e `Breakout4h`
+
+Arquivo: [`user_data/strategies/IntradayBreakoutStrategy.py`](user_data/strategies/IntradayBreakoutStrategy.py).
+
+Mesma lógica de rompimento a favor da tendência, com velas menores e stop móvel curto. As operações duram poucos dias, contra semanas no diário.
+
+| | `Breakout1h` (em simulação) | `Breakout4h` |
+|---|---|---|
+| Entrada | fechamento acima da máxima de 120 velas (5 dias), com vela forte e volume acima da média | fechamento acima da máxima de 120 velas (20 dias) |
+| Stop inicial | 3 ATR | 2,5 ATR |
+| Stop móvel | mínima das últimas 48 velas (48h) | mínima das últimas 18 velas (3 dias) |
+| Filtros | BTC acima da média de 100 dias (no diário), 6 moedas mais negociadas em 90 dias | iguais |
+| Tamanho | risco de 1,5% do saldo, 6 vagas | igual |
+
+Resultado no Freqtrade (taxa de 0,1% por lado, 12 pares):
+
+| Período | `Breakout1h` | `Breakout4h` | Mercado |
+|---|---|---|---|
+| set/2019 – dez/2022 | 39,0%/ano, DD 17,3%, PF 1,83, 345 operações | 40,2%/ano, DD 17,6%, PF 2,48, 159 operações | +483% |
+| 2023 – 2024 | 39,0%/ano, DD 14,0%, PF 1,80, 303 operações | 42,9%/ano, DD 16,9%, PF 2,43, 145 operações | +395% |
+| 2025 – out/2026 | 18,2%/ano, DD 14,0%, PF 1,64, 167 operações | 7,3%/ano, DD 14,5%, PF 1,36, 86 operações | −38% |
+
+Robustez:
+
+- **Vizinhança de parâmetros.** Nos 12 pares, 89% (1h) e 91% (4h) dos vizinhos (±20% em cada parâmetro) passam em todos os critérios. Nas 32 moedas, incluindo as que colapsaram, 88% e 99%.
+- **Teste final (2025–26).** É positivo em 100% dos vizinhos da versão de 1h e em 92–100% dos da de 4h.
+- **Custos.** Com custo dobrado (0,2% por lado), a de 1h ainda faz 35% / 33% / 15% ao ano nos três períodos.
+- **Pullbacks e reversão à média em 4h e 1h** foram testados e perdem dinheiro em todas as versões.
+
+No Railway, a `Breakout1h` roda no serviço `freqtrade-1h`. Os avisos chegam ao mesmo chat do Telegram com o prefixo **[Bot 1h]**, enviados por webhook ([`config-webhook.json`](user_data/config-webhook.json)), porque dois bots não podem compartilhar o mesmo token do Telegram com comandos. Para ter comandos (`/status` etc.) também no bot de 1h, crie um segundo bot no @BotFather e use o token dele nas variáveis `FREQTRADE__TELEGRAM__*` desse serviço.
+
+---
+
 ## Como ela foi encontrada
 
 A pesquisa está toda em [`research/`](research/) e seguiu um protocolo definido **antes** de olhar os resultados:
